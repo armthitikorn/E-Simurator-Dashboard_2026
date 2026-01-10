@@ -3,361 +3,207 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Audio Evaluation System | Enterprise V2</title>
+    <title>Audio Evaluator Pro | Multi-Clip Version</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;700&display=swap" rel="stylesheet">
-    
     <style>
-        :root {
-            --primary: #2563eb;
-            --secondary: #64748b;
-            --success: #059669;
-            --bg: #f8fafc;
-            --sidebar-width: 380px;
-        }
-
-        body {
-            font-family: 'Sarabun', sans-serif;
-            background-color: var(--bg);
-            margin: 0;
-            display: flex;
-            height: 100vh;
-            color: #1e293b;
-        }
-
-        /* Sidebar Style */
-        .sidebar {
-            width: var(--sidebar-width);
-            background: white;
-            border-right: 1px solid #e2e8f0;
-            display: flex;
-            flex-direction: column;
-            box-shadow: 4px 0 10px rgba(0,0,0,0.02);
-        }
-
-        .sidebar-header {
-            padding: 24px;
-            border-bottom: 1px solid #f1f5f9;
-        }
-
-        .filter-box {
-            background: #f1f5f9;
-            padding: 15px;
-            border-radius: 12px;
-            margin-top: 15px;
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-
-        .filter-box label {
-            font-size: 0.75rem;
-            font-weight: 700;
-            color: var(--secondary);
-            text-transform: uppercase;
-        }
-
-        .filter-box input {
-            padding: 8px 12px;
-            border: 1px solid #cbd5e1;
-            border-radius: 6px;
-            font-family: 'Sarabun';
-            font-size: 0.9rem;
-        }
-
-        .user-list {
-            flex: 1;
-            overflow-y: auto;
-            padding: 15px;
-        }
-
-        .user-item {
-            padding: 15px;
-            margin-bottom: 10px;
-            border-radius: 12px;
-            background: #fff;
-            border: 1px solid #e2e8f0;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-
-        .user-item:hover {
-            border-color: var(--primary);
-            transform: translateX(5px);
-            background: #f0f7ff;
-        }
-
-        .user-item.active {
-            border-color: var(--primary);
-            background: #eff6ff;
-            box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.1);
-        }
-
-        .user-date {
-            font-size: 0.75rem;
-            color: var(--secondary);
-            display: block;
-            margin-top: 4px;
-        }
+        :root { --primary: #2563eb; --bg: #f8fafc; --sidebar-width: 350px; }
+        body { font-family: 'Sarabun', sans-serif; background-color: var(--bg); margin: 0; display: flex; height: 100vh; color: #1e293b; }
+        
+        /* Sidebar */
+        .sidebar { width: var(--sidebar-width); background: white; border-right: 1px solid #e2e8f0; display: flex; flex-direction: column; }
+        .sidebar-header { padding: 20px; border-bottom: 1px solid #f1f5f9; }
+        .filter-box { background: #f1f5f9; padding: 15px; border-radius: 12px; display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+        .filter-box input { padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-family: 'Sarabun'; }
+        .user-list { flex: 1; overflow-y: auto; padding: 10px; }
+        .user-item { padding: 12px; margin-bottom: 8px; border-radius: 10px; border: 1px solid #e2e8f0; cursor: pointer; transition: 0.2s; background: #fff; }
+        .user-item:hover { border-color: var(--primary); background: #f0f7ff; }
+        .user-item.active { border-color: var(--primary); background: #eff6ff; border-width: 2px; }
 
         /* Main Content */
-        .main-content {
-            flex: 1;
-            padding: 40px;
-            overflow-y: auto;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-        }
-
-        .eval-card {
-            background: white;
-            width: 100%;
-            max-width: 900px;
-            border-radius: 24px;
-            padding: 40px;
-            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.05);
-            display: none;
-        }
-
-        .part-row {
-            display: grid;
-            grid-template-columns: 100px 1fr 120px;
-            gap: 20px;
-            align-items: center;
-            padding: 18px 0;
-            border-bottom: 1px solid #f1f5f9;
-        }
-
-        audio { height: 38px; width: 100%; border-radius: 30px; }
-
-        .btn {
-            padding: 10px 20px;
-            border-radius: 8px;
-            font-weight: 600;
-            border: none;
-            cursor: pointer;
-            transition: 0.2s;
-        }
-
-        .btn-primary { background: var(--primary); color: white; width: 100%; }
-        .btn-excel { background: var(--success); color: white; display: flex; align-items: center; gap: 8px; }
-
-        .score-input {
-            width: 100%;
-            padding: 8px;
-            border: 2px solid #e2e8f0;
-            border-radius: 8px;
-            text-align: center;
-            font-weight: bold;
-            font-size: 1.1rem;
-            color: var(--primary);
-        }
-
-        .score-input:focus { border-color: var(--primary); outline: none; }
-
-        textarea {
-            width: 100%;
-            height: 100px;
-            margin-top: 20px;
-            padding: 15px;
-            border-radius: 12px;
-            border: 1px solid #e2e8f0;
-            font-family: 'Sarabun';
-            box-sizing: border-box;
-        }
-
-        .status-badge {
-            font-size: 0.7rem;
-            padding: 2px 8px;
-            border-radius: 99px;
-            background: #dcfce7;
-            color: #166534;
-            font-weight: bold;
-        }
+        .main-content { flex: 1; padding: 30px; overflow-y: auto; display: flex; flex-direction: column; align-items: center; }
+        .eval-card { background: white; width: 100%; max-width: 950px; border-radius: 20px; padding: 35px; box-shadow: 0 10px 30px rgba(0,0,0,0.05); display: none; }
+        
+        /* Section Styling */
+        .section-container { margin-bottom: 25px; border: 1px solid #f1f5f9; border-radius: 15px; overflow: hidden; }
+        .section-header { background: #f8fafc; padding: 12px 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #f1f5f9; }
+        .section-title { font-weight: 700; color: var(--primary); }
+        
+        .clip-list { padding: 15px; display: flex; flex-direction: column; gap: 10px; }
+        .clip-row { display: grid; grid-template-columns: 80px 1fr 100px; gap: 15px; align-items: center; background: white; padding: 8px; border-radius: 8px; }
+        .clip-label { font-size: 0.75rem; color: #64748b; font-weight: bold; }
+        
+        audio { height: 32px; width: 100%; }
+        .score-box { text-align: right; }
+        .score-input { width: 70px; padding: 8px; border: 2px solid #e2e8f0; border-radius: 8px; text-align: center; font-weight: bold; font-size: 1.1rem; }
+        
+        textarea { width: 100%; height: 80px; margin-top: 15px; padding: 12px; border-radius: 10px; border: 1px solid #e2e8f0; font-family: 'Sarabun'; box-sizing: border-box; }
+        .btn { padding: 10px 20px; border-radius: 8px; font-weight: 600; border: none; cursor: pointer; transition: 0.2s; }
+        .btn-excel { background: #10b981; color: white; float: right; }
     </style>
 </head>
 <body>
 
 <div class="sidebar">
     <div class="sidebar-header">
-        <h2 style="margin:0; font-size: 1.4rem; letter-spacing: -0.5px;">Evaluator <span style="color:var(--primary)">Pro</span></h2>
-        
+        <h2 style="margin:0; font-size: 1.2rem;">Evaluator <span style="color:var(--primary)">System</span></h2>
         <div class="filter-box">
-            <label>🔍 ค้นหา ID / กรองวันที่</label>
-            <input type="text" id="searchId" placeholder="พิมพ์ User ID...">
-            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
-                <div style="display:flex; flex-direction:column;">
-                    <label style="font-size:0.6rem;">เริ่มต้น</label>
-                    <input type="date" id="startDate">
-                </div>
-                <div style="display:flex; flex-direction:column;">
-                    <label style="font-size:0.6rem;">สิ้นสุด</label>
-                    <input type="date" id="endDate">
-                </div>
+            <input type="text" id="searchId" placeholder="ค้นหา User ID...">
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:5px;">
+                <input type="date" id="startDate">
+                <input type="date" id="endDate">
             </div>
-            <button class="btn btn-primary" onclick="fetchUsers()">อัปเดตรายชื่อ</button>
+            <button class="btn" style="background:var(--primary); color:white;" onclick="fetchUsers()">🔍 กรองรายชื่อ</button>
         </div>
     </div>
-    
-    <div id="userList" class="user-list">
-        </div>
+    <div id="userList" class="user-list"></div>
 </div>
 
 <div class="main-content">
-    <div id="emptyState" style="text-align:center; margin-top:150px; color:var(--secondary);">
-        <h2 style="font-weight:300;">เลือกผู้ใช้งานเพื่อเริ่มประเมินผล</h2>
-        <p>คุณสามารถใช้ตัวกรองด้านซ้ายเพื่อจำกัดช่วงเวลาได้</p>
+    <div id="emptyState" style="text-align:center; margin-top:100px; color:#94a3b8;">
+        <h2>กรุณาเลือก User เพื่อเริ่มการประเมิน</h2>
     </div>
 
     <div id="evalCard" class="eval-card">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:30px;">
-            <div>
-                <span class="status-badge">กำลังดำเนินการ</span>
-                <h1 id="displayId" style="margin:5px 0 0 0; font-size: 1.8rem;">User ID: ---</h1>
-            </div>
-            <button class="btn btn-excel" onclick="exportToExcel()">📊 ดาวน์โหลด Excel</button>
-        </div>
+        <button class="btn btn-excel" onclick="exportToExcel()">📊 Export Excel</button>
+        <h1 id="displayId" style="margin:0; font-size: 1.4rem;">User ID: ---</h1>
+        <p id="displayDate" style="color:#64748b; margin-bottom: 25px;">วันที่อัปโหลด: --</p>
 
-        <div id="audioRows">
+        <div id="sectionsWrapper">
             </div>
 
-        <h3 style="margin-top:30px; font-size: 1rem;">ความคิดเห็นจากผู้ประเมิน</h3>
-        <textarea id="comment" placeholder="เขียนข้อเสนอแนะสำหรับการพัฒนา..."></textarea>
+        <h3 style="margin-top:20px; font-size: 1rem;">ข้อเสนอแนะเพิ่มเติม</h3>
+        <textarea id="comment" placeholder="ระบุความคิดเห็นที่นี่..."></textarea>
 
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:30px; padding-top:20px; border-top: 2px solid #f1f5f9;">
-            <div style="font-size: 1.4rem; font-weight: 700;">
-                SCORE: <span id="totalScore" style="color:var(--primary)">0</span> <span style="font-size:0.9rem; color:var(--secondary)">/ 50</span>
+        <div style="margin-top:25px; padding-top:20px; border-top: 2px solid #f1f5f9; display:flex; justify-content:space-between; align-items:center;">
+            <div style="font-size: 1.5rem; font-weight: 700;">
+                คะแนนรวม: <span id="totalScore" style="color:var(--primary)">0</span> / 50
             </div>
-            <div style="color:var(--secondary); font-size: 0.85rem;">ไฟล์ถูกจัดเก็บในระบบ Supabase Storage</div>
+            <span style="color:#94a3b8; font-size: 0.8rem;">ระบบดึงไฟล์อัตโนมัติจาก Storage</span>
         </div>
     </div>
 </div>
 
 <script type="module">
     import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
-
     const supabaseUrl = 'https://wzwyotzzxycqfwercakh.supabase.co';
     const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind6d3lvdHp6eHljcWZ3ZXJjYWtoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTcwNTg3MTMsImV4cCI6MjA3MjYzNDcxM30.lgiAf9oBUqsaWGb3u_80wuoKAODQHE_lIBxpGumhrno'; 
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    let currentUserData = { id: '', parts: {}, date: '' };
+    let currentEval = { id: '', scores: { S1:0, S2:0, S3:0, S4:0, S5:0 }, date: '' };
 
     async function fetchUsers() {
         const listEl = document.getElementById('userList');
-        const searchId = document.getElementById('searchId').value.trim().toLowerCase();
-        const startDate = document.getElementById('startDate').value;
-        const endDate = document.getElementById('endDate').value;
+        const search = document.getElementById('searchId').value.toLowerCase();
+        const start = document.getElementById('startDate').value;
+        const end = document.getElementById('endDate').value;
 
-        listEl.innerHTML = '<div style="text-align:center; padding:20px; font-size:0.9rem;">⏳ กำลังตรวจสอบข้อมูล...</div>';
+        listEl.innerHTML = 'กำลังโหลด...';
+        const { data: folders } = await supabase.storage.from('responses').list('');
         
-        const { data: users, error } = await supabase.storage.from('responses').list('');
-        if (error) return alert("Error fetching storage");
-
         listEl.innerHTML = '';
-        let count = 0;
+        for (const folder of folders) {
+            if (folder.name === '.emptyFolderPlaceholder') continue;
+            if (search && !folder.name.toLowerCase().includes(search)) continue;
 
-        for (const user of users) {
-            if (user.name === '.emptyFolderPlaceholder') continue;
-            if (searchId && !user.name.toLowerCase().includes(searchId)) continue;
-
-            // ตรวจสอบวันที่จากไฟล์แรกที่เจอในโฟลเดอร์ S1 (หรือโฟลเดอร์แรกที่มี)
-            const { data: files } = await supabase.storage.from('responses').list(`${user.name}/S1`);
-            
+            // ตรวจสอบวันที่จากโฟลเดอร์ S1
+            const { data: files } = await supabase.storage.from('responses').list(`${folder.name}/S1`);
             if (files && files.length > 0) {
-                const fileDate = new Date(files[0].created_at);
-                const fileDateStr = fileDate.toISOString().split('T')[0];
+                const fDate = new Date(files[0].created_at);
+                const fDateStr = fDate.toISOString().split('T')[0];
+                if ((start && fDateStr < start) || (end && fDateStr > end)) continue;
 
-                // กรองตามวันที่
-                if (startDate && fileDateStr < startDate) continue;
-                if (endDate && fileDateStr > endDate) continue;
-
-                count++;
                 const item = document.createElement('div');
                 item.className = 'user-item';
-                item.innerHTML = `
-                    <div style="font-weight:600;">${user.name.substring(0, 18)}...</div>
-                    <span class="user-date">📅 อัปโหลดเมื่อ: ${fileDate.toLocaleDateString('th-TH')}</span>
-                `;
+                item.innerHTML = `<strong>${folder.name.substring(0,15)}...</strong><br><small>📅 ${fDate.toLocaleDateString('th-TH')}</small>`;
                 item.onclick = () => {
-                    document.querySelectorAll('.user-item').forEach(el => el.classList.remove('active'));
+                    document.querySelectorAll('.user-item').forEach(e => e.classList.remove('active'));
                     item.classList.add('active');
-                    loadUserEvaluation(user.name, fileDate.toLocaleDateString('th-TH'));
+                    loadUser(folder.name, fDate.toLocaleDateString('th-TH'));
                 };
                 listEl.appendChild(item);
             }
         }
-        
-        if (count === 0) listEl.innerHTML = '<div style="text-align:center; padding:20px; color:var(--secondary);">ไม่พบข้อมูลที่ตรงเงื่อนไข</div>';
     }
 
-    async function loadUserEvaluation(userId, dateStr) {
+    async function loadUser(userId, dateStr) {
         document.getElementById('emptyState').style.display = 'none';
         document.getElementById('evalCard').style.display = 'block';
         document.getElementById('displayId').innerText = `User ID: ${userId}`;
-        const audioRows = document.getElementById('audioRows');
-        audioRows.innerHTML = '<div style="padding:20px; text-align:center;">กำลังดึงไฟล์เสียง...</div>';
+        document.getElementById('displayDate').innerText = `วันที่อัปโหลด: ${dateStr}`;
         
-        currentUserData = { id: userId, parts: { S1:0, S2:0, S3:0, S4:0, S5:0 }, date: dateStr };
+        const wrapper = document.getElementById('sectionsWrapper');
+        wrapper.innerHTML = '🔄 กำลังรวบรวมไฟล์เสียงทั้งหมด...';
+        
+        currentEval = { id: userId, scores: { S1:0, S2:0, S3:0, S4:0, S5:0 }, date: dateStr };
+        const sections = ['S1', 'S2', 'S3', 'S4', 'S5'];
+        wrapper.innerHTML = '';
 
-        audioRows.innerHTML = '';
-        for (let i = 1; i <= 5; i++) {
-            const partName = `S${i}`;
-            const { data: files } = await supabase.storage.from('responses').list(`${userId}/${partName}`);
+        for (const s of sections) {
+            const { data: files } = await supabase.storage.from('responses').list(`${userId}/${s}`);
+            const webmFiles = files ? files.filter(f => f.name.endsWith('.webm')) : [];
             
-            if (files && files.length > 0) {
-                const file = files.find(f => f.name.endsWith('.webm'));
-                if (file) {
-                    const { data: { publicUrl } } = supabase.storage.from('responses').getPublicUrl(`${userId}/${partName}/${file.name}`);
-                    appendAudioRow(partName, publicUrl);
-                }
+            // สร้าง Header และจุดลงคะแนนของแต่ละ Section
+            const secDiv = document.createElement('div');
+            secDiv.className = 'section-container';
+            secDiv.innerHTML = `
+                <div class="section-header">
+                    <span class="section-title">หัวข้อ ${s} (${webmFiles.length} ไฟล์)</span>
+                    <div class="score-box">
+                        <span style="font-size:0.8rem; color:#64748b;">คะแนนเต็ม 10: </span>
+                        <input type="number" class="score-input" min="0" max="10" value="0" oninput="updateScore('${s}', this.value)">
+                    </div>
+                </div>
+                <div class="clip-list" id="list-${s}"></div>
+            `;
+            wrapper.appendChild(secDiv);
+
+            const clipList = document.getElementById(`list-${s}`);
+            if (webmFiles.length === 0) {
+                clipList.innerHTML = '<small style="color:#94a3b8;">ไม่พบไฟล์ในหัวข้อนี้</small>';
+            } else {
+                webmFiles.forEach((file, index) => {
+                    const { data: { publicUrl } } = supabase.storage.from('responses').getPublicUrl(`${userId}/${s}/${file.name}`);
+                    const clipRow = document.createElement('div');
+                    clipRow.className = 'clip-row';
+                    clipRow.innerHTML = `
+                        <div class="clip-label">CLIP ${index + 1}</div>
+                        <audio controls src="${publicUrl}"></audio>
+                        <div style="font-size:0.6rem; color:#94a3b8; text-align:right;">${file.name.substring(0,8)}...</div>
+                    `;
+                    clipList.appendChild(clipRow);
+                });
             }
         }
         updateTotal();
     }
 
-    function appendAudioRow(part, url) {
-        const row = document.createElement('div');
-        row.className = 'part-row';
-        row.innerHTML = `
-            <div style="font-weight:bold; color:var(--secondary)">PART ${part}</div>
-            <audio controls src="${url}"></audio>
-            <input type="number" class="score-input" min="0" max="10" value="0" 
-                oninput="updatePartScore('${part}', this.value)">
-        `;
-        document.getElementById('audioRows').appendChild(row);
-    }
-
-    window.updatePartScore = (part, val) => {
-        currentUserData.parts[part] = parseInt(val) || 0;
+    window.updateScore = (s, val) => {
+        currentEval.scores[s] = parseInt(val) || 0;
         updateTotal();
     }
 
     function updateTotal() {
-        const total = Object.values(currentUserData.parts).reduce((a, b) => a + b, 0);
+        const total = Object.values(currentEval.scores).reduce((a,b) => a+b, 0);
         document.getElementById('totalScore').innerText = total;
     }
 
     window.exportToExcel = () => {
-        const comment = document.getElementById('comment').value;
         const data = [{
-            "วันที่ส่งงาน": currentUserData.date,
-            "User ID": currentUserData.id,
-            "S1": currentUserData.parts.S1, "S2": currentUserData.parts.S2,
-            "S3": currentUserData.parts.S3, "S4": currentUserData.parts.S4,
-            "S5": currentUserData.parts.S5,
-            "TOTAL": document.getElementById('totalScore').innerText,
-            "ความคิดเห็น": comment
+            "User ID": currentEval.id, "วันที่": currentEval.date,
+            "S1": currentEval.scores.S1, "S2": currentEval.scores.S2, "S3": currentEval.scores.S3,
+            "S4": currentEval.scores.S4, "S5": currentEval.scores.S5,
+            "คะแนนรวม": document.getElementById('totalScore').innerText,
+            "ความเห็น": document.getElementById('comment').value
         }];
         const ws = XLSX.utils.json_to_sheet(data);
         const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "Evaluation");
-        XLSX.writeFile(wb, `Eval_${currentUserData.id.substring(0,6)}.xlsx`);
-    };
+        XLSX.utils.book_append_sheet(wb, ws, "Result");
+        XLSX.writeFile(wb, `Eval_${currentEval.id.substring(0,6)}.xlsx`);
+    }
 
     window.onload = fetchUsers;
 </script>
-
 </body>
 </html>
