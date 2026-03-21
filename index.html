@@ -84,14 +84,14 @@
         </div>
     </div>
 </div>
-
 <script type="module">
     import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
     const supabaseUrl = 'https://wzwyotzzxycqfwercakh.supabase.co';
     const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind6d3lvdHp6eHljcWZ3ZXJjYWtoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTcwNTg3MTMsImV4cCI6MjA3MjYzNDcxM30.lgiAf9oBUqsaWGb3u_80wuoKAODQHE_lIBxpGumhrno'; 
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    let currentEval = { id: '', scores: { S1:0, S2:0, S3:0, S4:0, S5:0 }, date: '' };
+    // เพิ่มฟิลด์สำหรับเก็บชื่อและเวลาใน currentEval
+    let currentEval = { id: '', name: '', scores: { S1:0, S2:0, S3:0, S4:0, S5:0 }, date: '', fullTimestamp: '' };
 
     async function fetchUsers() {
         const listEl = document.getElementById('userList');
@@ -100,43 +100,69 @@
         const end = document.getElementById('endDate').value;
 
         listEl.innerHTML = 'กำลังโหลด...';
-        const { data: folders } = await supabase.storage.from('responses').list('');
         
-        listEl.innerHTML = '';
-        for (const folder of folders) {
-            if (folder.name === '.emptyFolderPlaceholder') continue;
-            if (search && !folder.name.toLowerCase().includes(search)) continue;
+        try {
+            const { data: folders } = await supabase.storage.from('responses').list('');
+            // ดึงข้อมูลชื่อจากตาราง users (ปรับชื่อตารางให้ตรงกับในฐานข้อมูลของคุณ)
+            const { data: userData } = await supabase.from('users').select('user_id, full_name');
+            
+            listEl.innerHTML = '';
+            for (const folder of folders) {
+                if (folder.name === '.emptyFolderPlaceholder') continue;
 
-            // ตรวจสอบวันที่จากโฟลเดอร์ S1
-            const { data: files } = await supabase.storage.from('responses').list(`${folder.name}/S1`);
-            if (files && files.length > 0) {
-                const fDate = new Date(files[0].created_at);
-                const fDateStr = fDate.toISOString().split('T')[0];
-                if ((start && fDateStr < start) || (end && fDateStr > end)) continue;
+                const { data: files } = await supabase.storage.from('responses').list(`${folder.name}/S1`);
+                if (files && files.length > 0) {
+                    const fDate = new Date(files[0].created_at);
+                    const fDateStr = fDate.toISOString().split('T')[0];
+                    const fullTime = fDate.toLocaleString('th-TH');
 
-                const item = document.createElement('div');
-                item.className = 'user-item';
-                item.innerHTML = `<strong>${folder.name.substring(0,15)}...</strong><br><small>📅 ${fDate.toLocaleDateString('th-TH')}</small>`;
-                item.onclick = () => {
-                    document.querySelectorAll('.user-item').forEach(e => e.classList.remove('active'));
-                    item.classList.add('active');
-                    loadUser(folder.name, fDate.toLocaleDateString('th-TH'));
-                };
-                listEl.appendChild(item);
+                    const userProfile = userData?.find(u => u.user_id === folder.name);
+                    const displayName = userProfile ? userProfile.full_name : folder.name;
+
+                    // ค้นหาจากชื่อ หรือ ID และกรองวันที่
+                    if (search && !displayName.toLowerCase().includes(search) && !folder.name.toLowerCase().includes(search)) continue;
+                    if ((start && fDateStr < start) || (end && fDateStr > end)) continue;
+
+                    const item = document.createElement('div');
+                    item.className = 'user-item';
+                    item.innerHTML = `
+                        <strong>👤 ${displayName.substring(0,25)}</strong><br>
+                        <small>📅 ${fullTime}</small>
+                    `;
+                    item.onclick = () => {
+                        document.querySelectorAll('.user-item').forEach(e => e.classList.remove('active'));
+                        item.classList.add('active');
+                        // ส่งค่าชื่อจริงและเวลาตัวเต็มไปที่ loadUser
+                        loadUser(folder.name, displayName, fullTime);
+                    };
+                    listEl.appendChild(item);
+                }
             }
+        } catch (e) {
+            listEl.innerHTML = 'ไม่สามารถดึงข้อมูลได้';
         }
     }
 
-    async function loadUser(userId, dateStr) {
+    async function loadUser(userId, fullName, timestamp) {
         document.getElementById('emptyState').style.display = 'none';
         document.getElementById('evalCard').style.display = 'block';
-        document.getElementById('displayId').innerText = `User ID: ${userId}`;
-        document.getElementById('displayDate').innerText = `วันที่อัปโหลด: ${dateStr}`;
+        
+        // แสดงชื่อพนักงานที่หน้าจอหลัก
+        document.getElementById('displayId').innerText = `พนักงาน: ${fullName}`;
+        document.getElementById('displayDate').innerText = `เวลาที่ส่งงาน: ${timestamp} (ID: ${userId})`;
         
         const wrapper = document.getElementById('sectionsWrapper');
-        wrapper.innerHTML = '🔄 กำลังรวบรวมไฟล์เสียงทั้งหมด...';
+        wrapper.innerHTML = '🔄 กำลังโหลดไฟล์เสียง...';
         
-        currentEval = { id: userId, scores: { S1:0, S2:0, S3:0, S4:0, S5:0 }, date: dateStr };
+        // บันทึกข้อมูลลงใน Object สำหรับ Export
+        currentEval = { 
+            id: userId, 
+            name: fullName, 
+            scores: { S1:0, S2:0, S3:0, S4:0, S5:0 }, 
+            date: timestamp.split(' ')[0], 
+            fullTimestamp: timestamp 
+        };
+
         const sections = ['S1', 'S2', 'S3', 'S4', 'S5'];
         wrapper.innerHTML = '';
 
@@ -144,14 +170,12 @@
             const { data: files } = await supabase.storage.from('responses').list(`${userId}/${s}`);
             const webmFiles = files ? files.filter(f => f.name.endsWith('.webm')) : [];
             
-            // สร้าง Header และจุดลงคะแนนของแต่ละ Section
             const secDiv = document.createElement('div');
             secDiv.className = 'section-container';
             secDiv.innerHTML = `
                 <div class="section-header">
-                    <span class="section-title">หัวข้อ ${s} (${webmFiles.length} ไฟล์)</span>
+                    <span class="section-title">หัวข้อ ${s}</span>
                     <div class="score-box">
-                        <span style="font-size:0.8rem; color:#64748b;">คะแนนเต็ม 10: </span>
                         <input type="number" class="score-input" min="0" max="10" value="0" oninput="updateScore('${s}', this.value)">
                     </div>
                 </div>
@@ -161,7 +185,7 @@
 
             const clipList = document.getElementById(`list-${s}`);
             if (webmFiles.length === 0) {
-                clipList.innerHTML = '<small style="color:#94a3b8;">ไม่พบไฟล์ในหัวข้อนี้</small>';
+                clipList.innerHTML = '<small style="color:#94a3b8; padding:10px;">ไม่พบไฟล์</small>';
             } else {
                 webmFiles.forEach((file, index) => {
                     const { data: { publicUrl } } = supabase.storage.from('responses').getPublicUrl(`${userId}/${s}/${file.name}`);
@@ -170,7 +194,6 @@
                     clipRow.innerHTML = `
                         <div class="clip-label">CLIP ${index + 1}</div>
                         <audio controls src="${publicUrl}"></audio>
-                        <div style="font-size:0.6rem; color:#94a3b8; text-align:right;">${file.name.substring(0,8)}...</div>
                     `;
                     clipList.appendChild(clipRow);
                 });
@@ -191,16 +214,22 @@
 
     window.exportToExcel = () => {
         const data = [{
-            "User ID": currentEval.id, "วันที่": currentEval.date,
-            "S1": currentEval.scores.S1, "S2": currentEval.scores.S2, "S3": currentEval.scores.S3,
-            "S4": currentEval.scores.S4, "S5": currentEval.scores.S5,
+            "ชื่อพนักงาน": currentEval.name,
+            "User ID": currentEval.id,
+            "วัน-เวลาที่ส่งงาน": currentEval.fullTimestamp,
+            "S1": currentEval.scores.S1,
+            "S2": currentEval.scores.S2,
+            "S3": currentEval.scores.S3,
+            "S4": currentEval.scores.S4,
+            "S5": currentEval.scores.S5,
             "คะแนนรวม": document.getElementById('totalScore').innerText,
-            "ความเห็น": document.getElementById('comment').value
+            "ข้อเสนอแนะ": document.getElementById('comment').value,
+            "วันที่ประเมิน": new Date().toLocaleString('th-TH')
         }];
         const ws = XLSX.utils.json_to_sheet(data);
         const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "Result");
-        XLSX.writeFile(wb, `Eval_${currentEval.id.substring(0,6)}.xlsx`);
+        XLSX.utils.book_append_sheet(wb, ws, "ผลการประเมิน");
+        XLSX.writeFile(wb, `ประเมิน_${currentEval.name}_${currentEval.id.substring(0,4)}.xlsx`);
     }
 
     window.onload = fetchUsers;
