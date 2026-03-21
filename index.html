@@ -81,20 +81,25 @@
     let scores = { S1: 0, S2: 0, S3: 0, S4: 0, S5: 0 };
 
     // 1. ดึงรายชื่อจาก Database เป็นหลัก
+   // 1. ดึงรายชื่อจาก Database เป็นหลัก (แก้ไขชื่อตารางให้มี s)
     async function loadEmployeeList() {
         const { data, error } = await supabase
-            .from('submission_with_email')
+            .from('submissions_with_email') // เพิ่ม s ตรงนี้ครับ
             .select('user_id, name, created_at')
             .order('created_at', { ascending: false });
 
         if (error) {
-            console.error(error);
-            document.getElementById('userList').innerHTML = 'ดึงข้อมูลไม่สำเร็จ';
+            console.error("❌ พบข้อผิดพลาด:", error.message);
+            // แสดง Error บนหน้าจอเผื่อไว้ดู
+            document.getElementById('userList').innerHTML = `<div style="padding:10px; color:red; font-size:0.8rem;">Error: ${error.message}</div>`;
             return;
         }
 
-        allSubmissions = data;
-        renderList(allSubmissions);
+        if (data) {
+            console.log("✅ ดึงข้อมูลสำเร็จ:", data.length, "รายการ");
+            allSubmissions = data;
+            renderList(allSubmissions);
+        }
     }
 
     function renderList(list) {
