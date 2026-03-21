@@ -82,34 +82,44 @@
 
     // 1. ดึงรายชื่อจาก Database เป็นหลัก
    // 1. ดึงรายชื่อจาก Database เป็นหลัก (แก้ไขชื่อตารางให้มี s)
+    // 1. ดึงรายชื่อจาก Database (แก้ไขให้เรียก renderList ถูกต้อง)
     async function loadEmployeeList() {
         const { data, error } = await supabase
-            .from('submissions_with_email') // เพิ่ม s ตรงนี้ครับ
+            .from('submissions_with_email')
             .select('user_id, name, created_at')
             .order('created_at', { ascending: false });
 
         if (error) {
             console.error("❌ พบข้อผิดพลาด:", error.message);
-            // แสดง Error บนหน้าจอเผื่อไว้ดู
-            document.getElementById('userList').innerHTML = `<div style="padding:10px; color:red; font-size:0.8rem;">Error: ${error.message}</div>`;
+            document.getElementById('userList').innerHTML = `<div style="padding:10px; color:red;">Error: ${error.message}</div>`;
             return;
         }
 
         if (data) {
             console.log("✅ ดึงข้อมูลสำเร็จ:", data.length, "รายการ");
             allSubmissions = data;
-            renderList(allSubmissions);
+            renderList(allSubmissions); // เรียกฟังก์ชันแสดงผล
         }
     }
 
-    function renderList(list) {
+    // 2. ฟังก์ชันแสดงผลรายชื่อ (แก้ไขบัค TypeError)
+    function renderList(dataToRender) {
         const listEl = document.getElementById('userList');
         listEl.innerHTML = '';
-        list(list).forEach(emp => {
+        
+        if (!dataToRender || dataToRender.length === 0) {
+            listEl.innerHTML = '<div style="padding:20px; text-align:center; color:#94a3b8;">ไม่พบรายชื่อ</div>';
+            return;
+        }
+
+        dataToRender.forEach(emp => {
             const date = new Date(emp.created_at).toLocaleDateString('th-TH');
             const item = document.createElement('div');
             item.className = 'user-item';
-            item.innerHTML = `<strong>👤 ${emp.name}</strong><br><small>📅 ${date} | ID: ${emp.user_id.substring(0,8)}</small>`;
+            item.innerHTML = `
+                <strong>👤 ${emp.name || 'ไม่ระบุชื่อ'}</strong><br>
+                <small>📅 ${date} | ID: ${emp.user_id ? emp.user_id.substring(0,8) : 'N/A'}</small>
+            `;
             item.onclick = () => selectEmployee(emp);
             listEl.appendChild(item);
         });
