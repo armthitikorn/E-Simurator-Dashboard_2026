@@ -93,57 +93,63 @@
     // เพิ่มฟิลด์เก็บชื่อพนักงาน
     let currentEval = { id: '', name: '', scores: { S1:0, S2:0, S3:0, S4:0, S5:0 }, date: '', fullTime: '' };
 
-    async function fetchUsers() {
-        const listEl = document.getElementById('userList');
-        const search = document.getElementById('searchId').value.toLowerCase();
-        const start = document.getElementById('startDate').value;
-        const end = document.getElementById('endDate').value;
+async function fetchUsers() {
+    const listEl = document.getElementById('userList');
+    const search = document.getElementById('searchId').value.toLowerCase();
+    const start = document.getElementById('startDate').value;
+    const end = document.getElementById('endDate').value;
 
-        listEl.innerHTML = 'กำลังโหลดรายชื่อ...';
+    listEl.innerHTML = 'กำลังโหลดรายชื่อ...';
+    
+    try {
+        // 1. ดึงรายชื่อจาก Storage (ดึงจาก Folder เพื่อให้ยังเล่นไฟล์เสียงได้เหมือนเดิม)
+        const { data: folders } = await supabase.storage.from('responses').list('');
         
-        try {
-            // 1. ดึงรายชื่อจาก Storage (คงเดิมเพื่อให้ดึงไฟล์เสียงได้)
-            const { data: folders } = await supabase.storage.from('responses').list('');
-            
-            // 2. ดึง Mapping ระหว่าง ID และ Name จากตาราง submissions
-            const { data: subData } = await supabase.from('submissions').select('user_id, name');
+        // 2. ดึง Mapping ชื่อจากตาราง submissions (คอลัมน์ user_id และ name)
+        // **ตรวจสอบชื่อตารางให้มั่นใจว่าใน Supabase ของคุณอาร์มชื่อ submissions**
+        const { data: subData, error: subError } = await supabase
+            .from('submissions')
+            .select('user_id, name');
 
-            listEl.innerHTML = '';
-            for (const folder of folders) {
-                if (folder.name === '.emptyFolderPlaceholder') continue;
+        if (subError) console.error("Database Error:", subError);
 
-                const { data: files } = await supabase.storage.from('responses').list(`${folder.name}/S1`);
-                if (files && files.length > 0) {
-                    const fDate = new Date(files[0].created_at);
-                    const fDateStr = fDate.toISOString().split('T')[0];
-                    const fullTimeStr = fDate.toLocaleString('th-TH');
+        listEl.innerHTML = '';
+        for (const folder of folders) {
+            if (folder.name === '.emptyFolderPlaceholder') continue;
 
-                    // จับคู่ ID จาก Storage กับชื่อในตาราง submissions
-                    const userMatch = subData?.find(s => s.user_id === folder.name);
-                    const displayName = userMatch ? userMatch.name : folder.name;
+            const { data: files } = await supabase.storage.from('responses').list(`${folder.name}/S1`);
+            if (files && files.length > 0) {
+                const fDate = new Date(files[0].created_at);
+                const fDateStr = fDate.toISOString().split('T')[0];
+                const fullTimeStr = fDate.toLocaleString('th-TH');
 
-                    // ค้นหาจากชื่อ หรือ ID และกรองวันที่
-                    if (search && !displayName.toLowerCase().includes(search) && !folder.name.toLowerCase().includes(search)) continue;
-                    if ((start && fDateStr < start) || (end && fDateStr > end)) continue;
+                // ค้นหาชื่อพนักงานที่คู่กับ ID นี้
+                const userMatch = subData?.find(s => s.user_id === folder.name);
+                const displayName = userMatch ? userMatch.name : folder.name; // ถ้าไม่เจอชื่อในตาราง จะโชว์ ID แทน
 
-                    const item = document.createElement('div');
-                    item.className = 'user-item';
-                    item.innerHTML = `
-                        <strong>👤 ${displayName}</strong><br>
-                        <small>📅 ${fullTimeStr}</small>
-                    `;
-                    item.onclick = () => {
-                        document.querySelectorAll('.user-item').forEach(e => e.classList.remove('active'));
-                        item.classList.add('active');
-                        loadUser(folder.name, displayName, fullTimeStr);
-                    };
-                    listEl.appendChild(item);
-                }
+                // ค้นหาจากชื่อ หรือ ID และกรองวันที่
+                if (search && !displayName.toLowerCase().includes(search) && !folder.name.toLowerCase().includes(search)) continue;
+                if ((start && fDateStr < start) || (end && fDateStr > end)) continue;
+
+                const item = document.createElement('div');
+                item.className = 'user-item';
+                item.innerHTML = `
+                    <strong>👤 ${displayName}</strong><br>
+                    <small>📅 ${fullTimeStr}</small>
+                `;
+                item.onclick = () => {
+                    document.querySelectorAll('.user-item').forEach(e => e.classList.remove('active'));
+                    item.classList.add('active');
+                    loadUser(folder.name, displayName, fullTimeStr);
+                };
+                listEl.appendChild(item);
             }
-        } catch (e) {
-            listEl.innerHTML = 'เกิดข้อผิดพลาดในการโหลดข้อมูล';
         }
+    } catch (e) {
+        console.error("Fetch Error:", e);
+        listEl.innerHTML = 'เกิดข้อผิดพลาดในการโหลดข้อมูล';
     }
+}
 
     async function loadUser(userId, fullName, fullTime) {
         document.getElementById('emptyState').style.display = 'none';
