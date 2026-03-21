@@ -99,28 +99,27 @@ async function fetchUsers() {
     const start = document.getElementById('startDate').value;
     const end = document.getElementById('endDate').value;
 
-    listEl.innerHTML = '<div style="padding:20px; text-align:center;">กำลังดึงรายชื่อจากระบบ...</div>';
+    listEl.innerHTML = 'กำลังประมวลผลรายชื่อ...';
     
     try {
         // 1. ดึง Folder จาก Storage (Bucket: responses)
-        const { data: folders, error: storageError } = await supabase.storage.from('responses').list('');
-        if (storageError) throw storageError;
+        const { data: folders } = await supabase.storage.from('responses').list('');
 
-        // 2. ดึงข้อมูลจากตารางที่ถูกต้อง: submission_with_email
+        // 2. ดึงชื่อจากตารางพื้นฐาน (submissions) แทนตาราง View
         const { data: subData, error: dbError } = await supabase
-            .from('submission_with_email')
+            .from('submissions')
             .select('user_id, name');
-        
-        if (dbError) throw dbError;
 
-        // 3. สร้างระบบ Mapping ชื่อพนักงาน (ใช้ Map เพื่อความแม่นยำ)
+        if (dbError) {
+            console.log("Database Info:", dbError.message);
+        }
+
+        // สร้างระบบ Mapping ชื่อ
         const nameMap = new Map();
         if (subData) {
             subData.forEach(item => {
                 if (item.user_id && item.name) {
-                    // ล้างค่าว่างและแปลงเป็นตัวพิมพ์เล็กเพื่อกันพลาด
-                    const cleanId = String(item.user_id).trim().toLowerCase();
-                    nameMap.set(cleanId, item.name.trim());
+                    nameMap.set(String(item.user_id).toLowerCase().trim(), item.name.trim());
                 }
             });
         }
@@ -129,51 +128,45 @@ async function fetchUsers() {
         for (const folder of folders) {
             if (folder.name === '.emptyFolderPlaceholder') continue;
 
-            // ตรวจสอบไฟล์ในโฟลเดอร์ S1 เพื่อดึงวันที่
+            // ดึงไฟล์ใน S1 เพื่อเอาวันที่
             const { data: files } = await supabase.storage.from('responses').list(`${folder.name}/S1`);
             
             if (files && files.length > 0) {
                 const fDate = new Date(files[0].created_at);
                 const fDateStr = fDate.toISOString().split('T')[0];
-                const fullTimeDisplay = fDate.toLocaleString('th-TH');
+                const folderKey = String(folder.name).toLowerCase().trim();
+                
+                // ดึงชื่อจากตาราง submissions มาแสดง
+                const displayName = nameMap.get(folderKey) || folder.name;
 
-                // ดึงชื่อจาก Map โดยใช้ Folder Name เป็น Key
-                const folderKey = String(folder.name).trim().toLowerCase();
-                const displayName = nameMap.get(folderKey) || `Unknown (${folder.name.substring(0,8)})`;
-
-                // ระบบ Filter ค้นหา
+                // ระบบ Filter
                 if (search && !displayName.toLowerCase().includes(search) && !folder.name.toLowerCase().includes(search)) continue;
                 if ((start && fDateStr < start) || (end && fDateStr > end)) continue;
 
                 const item = document.createElement('div');
                 item.className = 'user-item';
                 item.innerHTML = `
-                    <div style="display:flex; align-items:center; gap:12px; padding:5px;">
-                        <div style="background: linear-gradient(135deg, #2563eb, #3b82f6); color:white; width:40px; height:40px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-weight:bold; font-size:1.2rem; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                    <div style="display:flex; align-items:center; gap:10px;">
+                        <div style="background:#2563eb; color:white; width:35px; height:35px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:bold; flex-shrink:0;">
                             ${displayName.charAt(0)}
                         </div>
-                        <div style="flex:1;">
-                            <div style="font-weight:600; color:#1e293b; font-size:0.95rem;">${displayName}</div>
-                            <div style="font-size:0.75rem; color:#64748b; margin-top:2px;">📅 ${fullTimeDisplay}</div>
+                        <div style="overflow:hidden;">
+                            <strong style="display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${displayName}</strong>
+                            <small style="color:#64748b;">📅 ${fDate.toLocaleDateString('th-TH')}</small>
                         </div>
                     </div>
                 `;
                 item.onclick = () => {
                     document.querySelectorAll('.user-item').forEach(e => e.classList.remove('active'));
                     item.classList.add('active');
-                    loadUser(folder.name, displayName, fullTimeDisplay);
+                    loadUser(folder.name, displayName, fDate.toLocaleDateString('th-TH'));
                 };
                 listEl.appendChild(item);
             }
         }
-
-        if (listEl.innerHTML === '') {
-            listEl.innerHTML = '<div style="padding:40px; text-align:center; color:#94a3b8;">ไม่พบรายการที่ค้นหา</div>';
-        }
-
     } catch (e) {
-        console.error("Dashboard Error Log:", e);
-        listEl.innerHTML = `<div style="padding:20px; color:#ef4444; font-size:0.8rem;">เกิดข้อผิดพลาด: ${e.message}</div>`;
+        console.error("Fetch Error:", e);
+        listEl.innerHTML = 'ไม่สามารถโหลดข้อมูลได้';
     }
 }
 
