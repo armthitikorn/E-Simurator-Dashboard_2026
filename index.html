@@ -90,8 +90,8 @@
     const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind6d3lvdHp6eHljcWZ3ZXJjYWtoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTcwNTg3MTMsImV4cCI6MjA3MjYzNDcxM30.lgiAf9oBUqsaWGb3u_80wuoKAODQHE_lIBxpGumhrno'; 
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // เพิ่มฟิลด์สำหรับเก็บชื่อและเวลาใน currentEval
-    let currentEval = { id: '', name: '', scores: { S1:0, S2:0, S3:0, S4:0, S5:0 }, date: '', fullTimestamp: '' };
+    // เพิ่มฟิลด์เก็บชื่อพนักงาน
+    let currentEval = { id: '', name: '', scores: { S1:0, S2:0, S3:0, S4:0, S5:0 }, date: '', fullTime: '' };
 
     async function fetchUsers() {
         const listEl = document.getElementById('userList');
@@ -99,13 +99,15 @@
         const start = document.getElementById('startDate').value;
         const end = document.getElementById('endDate').value;
 
-        listEl.innerHTML = 'กำลังโหลด...';
+        listEl.innerHTML = 'กำลังโหลดรายชื่อ...';
         
         try {
+            // 1. ดึงรายชื่อจาก Storage (คงเดิมเพื่อให้ดึงไฟล์เสียงได้)
             const { data: folders } = await supabase.storage.from('responses').list('');
-            // ดึงข้อมูลชื่อจากตาราง users (ปรับชื่อตารางให้ตรงกับในฐานข้อมูลของคุณ)
-            const { data: userData } = await supabase.from('users').select('user_id, full_name');
             
+            // 2. ดึง Mapping ระหว่าง ID และ Name จากตาราง submissions
+            const { data: subData } = await supabase.from('submissions').select('user_id, name');
+
             listEl.innerHTML = '';
             for (const folder of folders) {
                 if (folder.name === '.emptyFolderPlaceholder') continue;
@@ -114,10 +116,11 @@
                 if (files && files.length > 0) {
                     const fDate = new Date(files[0].created_at);
                     const fDateStr = fDate.toISOString().split('T')[0];
-                    const fullTime = fDate.toLocaleString('th-TH');
+                    const fullTimeStr = fDate.toLocaleString('th-TH');
 
-                    const userProfile = userData?.find(u => u.user_id === folder.name);
-                    const displayName = userProfile ? userProfile.full_name : folder.name;
+                    // จับคู่ ID จาก Storage กับชื่อในตาราง submissions
+                    const userMatch = subData?.find(s => s.user_id === folder.name);
+                    const displayName = userMatch ? userMatch.name : folder.name;
 
                     // ค้นหาจากชื่อ หรือ ID และกรองวันที่
                     if (search && !displayName.toLowerCase().includes(search) && !folder.name.toLowerCase().includes(search)) continue;
@@ -126,41 +129,39 @@
                     const item = document.createElement('div');
                     item.className = 'user-item';
                     item.innerHTML = `
-                        <strong>👤 ${displayName.substring(0,25)}</strong><br>
-                        <small>📅 ${fullTime}</small>
+                        <strong>👤 ${displayName}</strong><br>
+                        <small>📅 ${fullTimeStr}</small>
                     `;
                     item.onclick = () => {
                         document.querySelectorAll('.user-item').forEach(e => e.classList.remove('active'));
                         item.classList.add('active');
-                        // ส่งค่าชื่อจริงและเวลาตัวเต็มไปที่ loadUser
-                        loadUser(folder.name, displayName, fullTime);
+                        loadUser(folder.name, displayName, fullTimeStr);
                     };
                     listEl.appendChild(item);
                 }
             }
         } catch (e) {
-            listEl.innerHTML = 'ไม่สามารถดึงข้อมูลได้';
+            listEl.innerHTML = 'เกิดข้อผิดพลาดในการโหลดข้อมูล';
         }
     }
 
-    async function loadUser(userId, fullName, timestamp) {
+    async function loadUser(userId, fullName, fullTime) {
         document.getElementById('emptyState').style.display = 'none';
         document.getElementById('evalCard').style.display = 'block';
         
-        // แสดงชื่อพนักงานที่หน้าจอหลัก
+        // แสดงชื่อจริงแทน ID ในหัวข้อหลัก
         document.getElementById('displayId').innerText = `พนักงาน: ${fullName}`;
-        document.getElementById('displayDate').innerText = `เวลาที่ส่งงาน: ${timestamp} (ID: ${userId})`;
+        document.getElementById('displayDate').innerText = `เวลาส่งงาน: ${fullTime} (ID: ${userId})`;
         
         const wrapper = document.getElementById('sectionsWrapper');
         wrapper.innerHTML = '🔄 กำลังโหลดไฟล์เสียง...';
         
-        // บันทึกข้อมูลลงใน Object สำหรับ Export
         currentEval = { 
             id: userId, 
             name: fullName, 
             scores: { S1:0, S2:0, S3:0, S4:0, S5:0 }, 
-            date: timestamp.split(' ')[0], 
-            fullTimestamp: timestamp 
+            date: fullTime.split(' ')[0],
+            fullTime: fullTime
         };
 
         const sections = ['S1', 'S2', 'S3', 'S4', 'S5'];
@@ -202,6 +203,26 @@
         updateTotal();
     }
 
+    // ฟังก์ชัน Export Excel ที่รวมชื่อพนักงานเข้าไปด้วย
+    window.exportToExcel = () => {
+        const data = [{
+            "ชื่อพนักงาน": currentEval.name,
+            "User ID": currentEval.id,
+            "เวลาที่ส่งงาน": currentEval.fullTime,
+            "S1": currentEval.scores.S1,
+            "S2": currentEval.scores.S2,
+            "S3": currentEval.scores.S3,
+            "S4": currentEval.scores.S4,
+            "S5": currentEval.scores.S5,
+            "คะแนนรวม": document.getElementById('totalScore').innerText,
+            "ความคิดเห็น": document.getElementById('comment').value
+        }];
+        const ws = XLSX.utils.json_to_sheet(data);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "ผลการประเมิน");
+        XLSX.writeFile(wb, `ประเมิน_${currentEval.name}.xlsx`);
+    }
+
     window.updateScore = (s, val) => {
         currentEval.scores[s] = parseInt(val) || 0;
         updateTotal();
@@ -210,26 +231,6 @@
     function updateTotal() {
         const total = Object.values(currentEval.scores).reduce((a,b) => a+b, 0);
         document.getElementById('totalScore').innerText = total;
-    }
-
-    window.exportToExcel = () => {
-        const data = [{
-            "ชื่อพนักงาน": currentEval.name,
-            "User ID": currentEval.id,
-            "วัน-เวลาที่ส่งงาน": currentEval.fullTimestamp,
-            "S1": currentEval.scores.S1,
-            "S2": currentEval.scores.S2,
-            "S3": currentEval.scores.S3,
-            "S4": currentEval.scores.S4,
-            "S5": currentEval.scores.S5,
-            "คะแนนรวม": document.getElementById('totalScore').innerText,
-            "ข้อเสนอแนะ": document.getElementById('comment').value,
-            "วันที่ประเมิน": new Date().toLocaleString('th-TH')
-        }];
-        const ws = XLSX.utils.json_to_sheet(data);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "ผลการประเมิน");
-        XLSX.writeFile(wb, `ประเมิน_${currentEval.name}_${currentEval.id.substring(0,4)}.xlsx`);
     }
 
     window.onload = fetchUsers;
