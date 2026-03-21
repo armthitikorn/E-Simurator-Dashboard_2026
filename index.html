@@ -99,23 +99,26 @@ async function fetchUsers() {
     const start = document.getElementById('startDate').value;
     const end = document.getElementById('endDate').value;
 
-    listEl.innerHTML = 'กำลังโหลดรายชื่อ...';
+    listEl.innerHTML = 'กำลังเชื่อมต่อฐานข้อมูล...';
     
     try {
-        // 1. ดึง Folder จาก Storage
-        const { data: folders } = await supabase.storage.from('responses').list('');
-        
-        // 2. ดึงชื่อพนักงานจากตาราง submissions โดยระบุคอลัมน์ให้ชัดเจน
-        const { data: subData } = await supabase
+        // 1. ดึงชื่อ Folder จาก Storage
+        const { data: folders, error: storageError } = await supabase.storage.from('responses').list('');
+        if (storageError) throw storageError;
+
+        // 2. ดึงข้อมูลจากตาราง submissions (ตรวจสอบชื่อตารางให้เป็นตัวพิมพ์เล็กทั้งหมด)
+        const { data: subData, error: dbError } = await supabase
             .from('submissions')
             .select('user_id, name');
+        if (dbError) throw dbError;
 
-        // 3. สร้าง Map เพื่อเก็บคู่ ID => Name (ช่วยให้การค้นหาชื่อแม่นยำขึ้น)
-        const nameMap = {};
+        // 3. สร้างระบบ Mapping ที่แม่นยำที่สุด
+        const nameMap = new Map();
         if (subData) {
             subData.forEach(item => {
-                if (item.user_id) {
-                    nameMap[String(item.user_id).toLowerCase()] = item.name;
+                if (item.user_id && item.name) {
+                    // บังคับให้ key เป็น string และตัวพิมพ์เล็ก
+                    nameMap.set(String(item.user_id).toLowerCase(), item.name);
                 }
             });
         }
@@ -124,40 +127,51 @@ async function fetchUsers() {
         for (const folder of folders) {
             if (folder.name === '.emptyFolderPlaceholder') continue;
 
+            // ตรวจสอบไฟล์เสียงในโฟลเดอร์ S1 เพื่อดึงวันที่สร้าง
             const { data: files } = await supabase.storage.from('responses').list(`${folder.name}/S1`);
+            
             if (files && files.length > 0) {
                 const fDate = new Date(files[0].created_at);
                 const fDateStr = fDate.toISOString().split('T')[0];
+                const fullTimeDisplay = fDate.toLocaleString('th-TH');
 
-                // --- ดึงชื่อจาก Map ที่เราสร้างไว้ ---
+                // --- จุดพิฆาตบัค: ดึงชื่อโดยใช้ Key ที่ล้างค่าแล้ว ---
                 const folderKey = String(folder.name).toLowerCase();
-                const displayName = nameMap[folderKey] || folder.name; // ถ้าไม่เจอชื่อ ให้โชว์ ID ตามเดิม
+                const displayName = nameMap.get(folderKey) || folder.name;
 
-                // ระบบ Filter ค้นหาชื่อและวันที่
+                // ระบบ Filter
                 if (search && !displayName.toLowerCase().includes(search) && !folder.name.toLowerCase().includes(search)) continue;
                 if ((start && fDateStr < start) || (end && fDateStr > end)) continue;
 
                 const item = document.createElement('div');
                 item.className = 'user-item';
                 item.innerHTML = `
-                    <strong>👤 ${displayName}</strong><br>
-                    <small>📅 ${fDate.toLocaleDateString('th-TH')} | ID: ${folder.name.substring(0,8)}</small>
+                    <div style="display:flex; align-items:center; gap:10px;">
+                        <div style="background:#2563eb; color:white; width:35px; height:35px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:bold;">
+                            ${displayName.charAt(0)}
+                        </div>
+                        <div>
+                            <strong>${displayName}</strong><br>
+                            <small style="color:#64748b;">📅 ${fullTimeDisplay}</small>
+                        </div>
+                    </div>
                 `;
                 item.onclick = () => {
                     document.querySelectorAll('.user-item').forEach(e => e.classList.remove('active'));
                     item.classList.add('active');
-                    loadUser(folder.name, displayName, fDate.toLocaleDateString('th-TH'));
+                    loadUser(folder.name, displayName, fullTimeDisplay);
                 };
                 listEl.appendChild(item);
             }
         }
-        
+
         if (listEl.innerHTML === '') {
-            listEl.innerHTML = '<div style="text-align:center; color:#94a3b8; padding:20px;">ไม่พบข้อมูล</div>';
+            listEl.innerHTML = '<div style="padding:20px; text-align:center; color:#94a3b8;">ไม่พบข้อมูลพนักงาน</div>';
         }
+
     } catch (e) {
-        console.error("Fetch Error:", e);
-        listEl.innerHTML = 'เกิดข้อผิดพลาดในการโหลดข้อมูล';
+        console.error("Dashboard Error:", e);
+        listEl.innerHTML = `<div style="padding:20px; color:red;">ข้อผิดพลาด: ${e.message}</div>`;
     }
 }
 
