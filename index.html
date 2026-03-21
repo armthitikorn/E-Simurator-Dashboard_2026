@@ -105,8 +105,20 @@ async function fetchUsers() {
         // 1. ดึง Folder จาก Storage
         const { data: folders } = await supabase.storage.from('responses').list('');
         
-        // 2. ดึง Mapping ชื่อจากตาราง submissions
-        const { data: subData } = await supabase.from('submissions').select('user_id, name');
+        // 2. ดึงชื่อพนักงานจากตาราง submissions โดยระบุคอลัมน์ให้ชัดเจน
+        const { data: subData } = await supabase
+            .from('submissions')
+            .select('user_id, name');
+
+        // 3. สร้าง Map เพื่อเก็บคู่ ID => Name (ช่วยให้การค้นหาชื่อแม่นยำขึ้น)
+        const nameMap = {};
+        if (subData) {
+            subData.forEach(item => {
+                if (item.user_id) {
+                    nameMap[String(item.user_id).toLowerCase()] = item.name;
+                }
+            });
+        }
 
         listEl.innerHTML = '';
         for (const folder of folders) {
@@ -117,11 +129,11 @@ async function fetchUsers() {
                 const fDate = new Date(files[0].created_at);
                 const fDateStr = fDate.toISOString().split('T')[0];
 
-                // --- จุดแก้ไขสำคัญ: แปลงค่าให้เป็น String ก่อนเทียบกัน ---
-                const userMatch = subData?.find(s => String(s.user_id).toLowerCase() === String(folder.name).toLowerCase());
-                const displayName = userMatch ? userMatch.name : folder.name;
+                // --- ดึงชื่อจาก Map ที่เราสร้างไว้ ---
+                const folderKey = String(folder.name).toLowerCase();
+                const displayName = nameMap[folderKey] || folder.name; // ถ้าไม่เจอชื่อ ให้โชว์ ID ตามเดิม
 
-                // ระบบ Filter ชื่อและวันที่
+                // ระบบ Filter ค้นหาชื่อและวันที่
                 if (search && !displayName.toLowerCase().includes(search) && !folder.name.toLowerCase().includes(search)) continue;
                 if ((start && fDateStr < start) || (end && fDateStr > end)) continue;
 
@@ -139,7 +151,12 @@ async function fetchUsers() {
                 listEl.appendChild(item);
             }
         }
+        
+        if (listEl.innerHTML === '') {
+            listEl.innerHTML = '<div style="text-align:center; color:#94a3b8; padding:20px;">ไม่พบข้อมูล</div>';
+        }
     } catch (e) {
+        console.error("Fetch Error:", e);
         listEl.innerHTML = 'เกิดข้อผิดพลาดในการโหลดข้อมูล';
     }
 }
