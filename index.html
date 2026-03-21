@@ -102,30 +102,27 @@ async function fetchUsers() {
     listEl.innerHTML = 'กำลังโหลดรายชื่อ...';
     
     try {
-        // 1. ดึงรายชื่อจาก Storage (ดึงจาก Folder เพื่อให้ยังเล่นไฟล์เสียงได้เหมือนเดิม)
+        // 1. ดึงโฟลเดอร์จาก Storage ตามปกติ (เพื่อรักษาโครงสร้างเดิม)
         const { data: folders } = await supabase.storage.from('responses').list('');
         
-        // 2. ดึง Mapping ชื่อจากตาราง submissions (คอลัมน์ user_id และ name)
-        // **ตรวจสอบชื่อตารางให้มั่นใจว่าใน Supabase ของคุณอาร์มชื่อ submissions**
-        const { data: subData, error: subError } = await supabase
+        // 2. ดึงข้อมูลชื่อพนักงานจากตาราง submissions มาแมตช์ (เลียนแบบ Logic จาก index 6)
+        const { data: nameData } = await supabase
             .from('submissions')
             .select('user_id, name');
-
-        if (subError) console.error("Database Error:", subError);
 
         listEl.innerHTML = '';
         for (const folder of folders) {
             if (folder.name === '.emptyFolderPlaceholder') continue;
 
+            // ตรวจสอบไฟล์ใน S1 เพื่อดึงวันที่
             const { data: files } = await supabase.storage.from('responses').list(`${folder.name}/S1`);
             if (files && files.length > 0) {
                 const fDate = new Date(files[0].created_at);
                 const fDateStr = fDate.toISOString().split('T')[0];
-                const fullTimeStr = fDate.toLocaleString('th-TH');
-
-                // ค้นหาชื่อพนักงานที่คู่กับ ID นี้
-                const userMatch = subData?.find(s => s.user_id === folder.name);
-                const displayName = userMatch ? userMatch.name : folder.name; // ถ้าไม่เจอชื่อในตาราง จะโชว์ ID แทน
+                
+                // --- จุดที่แก้ไข: จับคู่ ID กับ ชื่อจาก Database ---
+                const match = nameData?.find(n => n.user_id === folder.name);
+                const displayName = match ? match.name : folder.name; // ถ้าไม่เจอชื่อจะโชว์ ID แทน
 
                 // ค้นหาจากชื่อ หรือ ID และกรองวันที่
                 if (search && !displayName.toLowerCase().includes(search) && !folder.name.toLowerCase().includes(search)) continue;
@@ -135,18 +132,18 @@ async function fetchUsers() {
                 item.className = 'user-item';
                 item.innerHTML = `
                     <strong>👤 ${displayName}</strong><br>
-                    <small>📅 ${fullTimeStr}</small>
+                    <small>📅 ${fDate.toLocaleDateString('th-TH')} | ID: ${folder.name.substring(0,8)}</small>
                 `;
                 item.onclick = () => {
                     document.querySelectorAll('.user-item').forEach(e => e.classList.remove('active'));
                     item.classList.add('active');
-                    loadUser(folder.name, displayName, fullTimeStr);
+                    loadUser(folder.name, displayName, fDate.toLocaleDateString('th-TH'));
                 };
                 listEl.appendChild(item);
             }
         }
     } catch (e) {
-        console.error("Fetch Error:", e);
+        console.error("Error:", e);
         listEl.innerHTML = 'เกิดข้อผิดพลาดในการโหลดข้อมูล';
     }
 }
