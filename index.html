@@ -37,8 +37,7 @@
             <input type="text" id="searchName" class="search-input" placeholder="ค้นหาชื่อพนักงาน..." oninput="filterList()">
             <input type="date" id="searchDate" class="search-input" onchange="filterList()">
         </div>
-        <div id="userList" class="user-list">
-            </div>
+        <div id="userList" class="user-list"></div>
     </div>
 
     <div class="main">
@@ -57,8 +56,7 @@
                 </div>
             </div>
 
-            <div id="audioSections">
-                </div>
+            <div id="audioSections"></div>
 
             <div style="margin-top:20px;">
                 <label><b>ข้อเสนอแนะเพิ่มเติม:</b></label>
@@ -80,14 +78,10 @@
     let currentEmployee = null;
     let scores = { S1: 0, S2: 0, S3: 0, S4: 0, S5: 0 };
 
-    // 1. ดึงรายชื่อจาก Database เป็นหลัก
-   // 1. ดึงรายชื่อจาก Database เป็นหลัก (แก้ไขชื่อตารางให้มี s)
-    // 1. ดึงรายชื่อจาก Database (แก้ไขให้เรียก renderList ถูกต้อง)
-   // 1. ดึงรายชื่อจาก Database
     // 1. ดึงรายชื่อจาก Database และยุบรวมชื่อที่ซ้ำกัน
     async function loadEmployeeList() {
         const { data, error } = await supabase
-            .from('submissions_with_email') // หรือ 'submissions' ตามที่คุณอาร์มใช้จริง
+            .from('submissions_with_email')
             .select('user_id, name, created_at')
             .order('created_at', { ascending: false });
 
@@ -98,23 +92,60 @@
         }
 
         if (data) {
-            // --- โค้ดส่วนที่เพิ่มมาเพื่อจัดกลุ่ม (Group) รายชื่อที่ซ้ำกัน ---
+            // จัดกลุ่ม (Group) รายชื่อที่ user_id ซ้ำกัน
             const uniqueUsersMap = new Map();
             data.forEach(item => {
-                // ถ้า user_id นี้ยังไม่เคยถูกเพิ่มเข้าไป ให้เพิ่มเข้าไป (จะเก็บเวลาล่าสุดไว้เพราะเรา Order by created_at DESC มาแล้ว)
                 if (!uniqueUsersMap.has(item.user_id)) {
                     uniqueUsersMap.set(item.user_id, item);
                 }
             });
             
-            // แปลงข้อมูลที่จัดกลุ่มแล้วกลับมาเป็น Array เพื่อนำไปแสดงผล
+            // แปลงกลับเป็น Array
             allSubmissions = Array.from(uniqueUsersMap.values());
-            
             console.log("✅ ดึงข้อมูลสำเร็จ (จัดกลุ่มแล้วเหลือ):", allSubmissions.length, "คน");
-            renderList(allSubmissions); // ส่งข้อมูลไปแสดงผล
+            
+            // เรียกใช้ฟังก์ชันวาดหน้าจอ
+            renderList(allSubmissions);
         }
     }
 
+    // 2. ฟังก์ชันแสดงผลรายชื่อที่ถูกจัดกลุ่มแล้ว
+    function renderList(items) {
+        const listEl = document.getElementById('userList');
+        listEl.innerHTML = '';
+        
+        if (!items || items.length === 0) {
+            listEl.innerHTML = '<div style="padding:20px; text-align:center; color:#94a3b8;">ไม่พบรายชื่อพนักงาน</div>';
+            return;
+        }
+
+        items.forEach(emp => {
+            const date = new Date(emp.created_at).toLocaleDateString('th-TH');
+            const item = document.createElement('div');
+            item.className = 'user-item';
+            const displayName = emp.name || `ID: ${emp.user_id.substring(0,8)}`;
+            
+            item.innerHTML = `
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <div style="background:#2563eb; color:white; width:30px; height:30px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:0.8rem; flex-shrink:0;">
+                        ${displayName.charAt(0)}
+                    </div>
+                    <div style="overflow:hidden;">
+                        <strong style="display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${displayName}</strong>
+                        <small style="color:#64748b; font-size:0.75rem;">📅 ${date}</small>
+                    </div>
+                </div>
+            `;
+            item.onclick = () => {
+                document.querySelectorAll('.user-item').forEach(el => el.classList.remove('active'));
+                item.classList.add('active');
+                selectEmployee(emp);
+            };
+            listEl.appendChild(item);
+        });
+    }
+
+    // 3. ฟังก์ชันค้นหา
     window.filterList = () => {
         const name = document.getElementById('searchName').value.toLowerCase();
         const date = document.getElementById('searchDate').value;
@@ -126,7 +157,7 @@
         renderList(filtered);
     }
 
-    // 2. เมื่อเลือกพนักงาน ให้ไปดึงไฟล์เสียงจาก Storage
+    // 4. เมื่อเลือกพนักงาน ให้ไปดึงไฟล์เสียงทั้งหมดจาก Storage
     async function selectEmployee(emp) {
         currentEmployee = emp;
         scores = { S1: 0, S2: 0, S3: 0, S4: 0, S5: 0 };
@@ -139,40 +170,55 @@
         document.getElementById('displayId').innerText = `ID: ${emp.user_id}`;
 
         const sectionsContainer = document.getElementById('audioSections');
-        sectionsContainer.innerHTML = '🔄 กำลังโหลดไฟล์เสียง...';
+        sectionsContainer.innerHTML = '<div style="text-align:center; padding: 20px;">🔄 กำลังโหลดไฟล์เสียงทั้งหมด กรุณารอสักครู่...</div>';
 
         let html = '';
         const steps = ['S1', 'S2', 'S3', 'S4', 'S5'];
 
         for (const s of steps) {
+            // ดึงรายชื่อไฟล์ทั้งหมดในโฟลเดอร์ของ Section นั้นๆ
             const { data: files } = await supabase.storage.from('responses').list(`${emp.user_id}/${s}`);
-            const audioFile = files?.find(f => f.name.endsWith('.webm') || f.name.endsWith('.mp3'));
+            
+            // กรองเอาเฉพาะไฟล์เสียง
+            const audioFiles = files?.filter(f => f.name.endsWith('.webm') || f.name.endsWith('.mp3')) || [];
 
-            let audioTag = '<p style="color:#94a3b8;">ไม่พบไฟล์เสียงในหัวตอนนี้</p>';
-            if (audioFile) {
-                const { data: { publicUrl } } = supabase.storage.from('responses').getPublicUrl(`${emp.user_id}/${s}/${audioFile.name}`);
-                audioTag = `<audio controls src="${publicUrl}"></audio>`;
+            let audioTags = '';
+            if (audioFiles.length > 0) {
+                // สร้างตัวเล่นเสียงตามจำนวนไฟล์ที่เจอ
+                audioFiles.forEach((file, index) => {
+                    const { data: { publicUrl } } = supabase.storage.from('responses').getPublicUrl(`${emp.user_id}/${s}/${file.name}`);
+                    audioTags += `
+                        <div style="margin-top: 10px; padding: 10px; background-color: #f8fafc; border-radius: 8px;">
+                            <small style="color:#64748b; font-weight: bold;">🔊 ไฟล์เสียงที่ ${index + 1}</small>
+                            <audio controls src="${publicUrl}" style="width: 100%; margin-top: 5px; outline: none;"></audio>
+                        </div>
+                    `;
+                });
+            } else {
+                audioTags = '<p style="color:#94a3b8; margin-top: 15px;">ไม่พบไฟล์เสียงในหัวข้อนี้</p>';
             }
 
             html += `
                 <div class="section-box">
-                    <div style="display:flex; justify-content:space-between; align-items:center;">
-                        <span style="font-weight:600;">หัวข้อ ${s}</span>
+                    <div style="display:flex; justify-content:space-between; align-items:center; border-bottom: 1px dashed #e2e8f0; padding-bottom: 10px;">
+                        <span style="font-weight:600; font-size: 1.1em; color: var(--primary);">หัวข้อ ${s} <span style="font-size: 0.8em; color: #64748b;">(${audioFiles.length} ไฟล์)</span></span>
                         <div>คะแนน: <input type="number" class="score-input" min="0" max="10" value="0" oninput="updateScore('${s}', this.value)"></div>
                     </div>
-                    ${audioTag}
+                    ${audioTags}
                 </div>
             `;
         }
         sectionsContainer.innerHTML = html;
     }
 
+    // 5. อัปเดตคะแนน
     window.updateScore = (s, val) => {
         scores[s] = parseInt(val) || 0;
         const total = Object.values(scores).reduce((a, b) => a + b, 0);
         document.getElementById('totalScore').innerText = total;
     }
 
+    // 6. ออกรายงาน Excel
     window.exportToExcel = () => {
         const data = [{
             "ชื่อพนักงาน": currentEmployee.name,
@@ -189,6 +235,7 @@
         XLSX.writeFile(wb, `ประเมิน_${currentEmployee.name}.xlsx`);
     }
 
+    // เริ่มทำงานเมื่อหน้าเว็บโหลดเสร็จ
     window.onload = loadEmployeeList;
 </script>
 </body>
