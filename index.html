@@ -24,8 +24,11 @@
         .main { flex: 1; overflow-y: auto; padding: 30px; }
         .card { background: white; border-radius: 12px; padding: 25px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
         .section-box { border: 1px solid #e2e8f0; border-radius: 8px; padding: 15px; margin-bottom: 15px; }
-        .score-input { width: 60px; padding: 5px; border-radius: 4px; border: 1px solid #cbd5e1; text-align: center; }
-        .btn-export { background: #10b981; color: white; padding: 12px 24px; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; }
+        
+        /* ปรับปรุงขนาดช่องเลือกคะแนน */
+        .score-input { padding: 6px 12px; border-radius: 6px; border: 1px solid #cbd5e1; font-family: 'Sarabun', sans-serif; font-size: 15px; background-color: #fff; cursor: pointer; }
+        .btn-export { background: #10b981; color: white; padding: 12px 24px; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; transition: background 0.2s; }
+        .btn-export:hover { background: #059669; }
         audio { width: 100%; margin-top: 10px; }
     </style>
 </head>
@@ -52,7 +55,7 @@
                     <p id="displayId" style="color:#64748b; margin:5px 0; font-size:0.9rem;"></p>
                 </div>
                 <div style="text-align:right;">
-                    <div style="font-size:1.5rem; font-weight:bold; color:var(--primary);">Total: <span id="totalScore">0</span></div>
+                    <div style="font-size:1.5rem; font-weight:bold; color:var(--primary);">คะแนนรวม: <span id="totalScore">0</span> / 25</div>
                 </div>
             </div>
 
@@ -60,11 +63,11 @@
 
             <div style="margin-top:20px;">
                 <label><b>ข้อเสนอแนะเพิ่มเติม:</b></label>
-                <textarea id="feedback" style="width:100%; height:80px; margin-top:10px; border-radius:8px; border:1px solid #cbd5e1; padding:10px; font-family:inherit;"></textarea>
+                <textarea id="feedback" style="width:100%; height:80px; margin-top:10px; border-radius:8px; border:1px solid #cbd5e1; padding:10px; font-family:inherit;" placeholder="พิมพ์ข้อเสนอแนะสำหรับการประเมินครั้งนี้..."></textarea>
             </div>
 
             <div style="margin-top:20px; text-align:right;">
-                <button class="btn-export" onclick="exportToExcel()">ดาวน์โหลดรายงาน Excel</button>
+                <button class="btn-export" onclick="exportToExcel()">📊 ดาวน์โหลดรายงาน Excel</button>
             </div>
         </div>
     </div>
@@ -78,10 +81,9 @@
     let currentEmployee = null;
     let scores = { S1: 0, S2: 0, S3: 0, S4: 0, S5: 0 };
 
-    // 1. ดึงรายชื่อจาก Database และยุบรวมชื่อที่ซ้ำกัน
     async function loadEmployeeList() {
         const { data, error } = await supabase
-            .from('submissions_with_email')
+            .from('submissions') // ใช้ตารางหลัก submissions ตามเดิม
             .select('user_id, name, created_at')
             .order('created_at', { ascending: false });
 
@@ -92,7 +94,6 @@
         }
 
         if (data) {
-            // จัดกลุ่ม (Group) รายชื่อที่ user_id ซ้ำกัน
             const uniqueUsersMap = new Map();
             data.forEach(item => {
                 if (!uniqueUsersMap.has(item.user_id)) {
@@ -100,16 +101,11 @@
                 }
             });
             
-            // แปลงกลับเป็น Array
             allSubmissions = Array.from(uniqueUsersMap.values());
-            console.log("✅ ดึงข้อมูลสำเร็จ (จัดกลุ่มแล้วเหลือ):", allSubmissions.length, "คน");
-            
-            // เรียกใช้ฟังก์ชันวาดหน้าจอ
             renderList(allSubmissions);
         }
     }
 
-    // 2. ฟังก์ชันแสดงผลรายชื่อที่ถูกจัดกลุ่มแล้ว
     function renderList(items) {
         const listEl = document.getElementById('userList');
         listEl.innerHTML = '';
@@ -145,7 +141,6 @@
         });
     }
 
-    // 3. ฟังก์ชันค้นหา
     window.filterList = () => {
         const name = document.getElementById('searchName').value.toLowerCase();
         const date = document.getElementById('searchDate').value;
@@ -157,10 +152,9 @@
         renderList(filtered);
     }
 
-    // 4. เมื่อเลือกพนักงาน ให้ไปดึงไฟล์เสียงทั้งหมดจาก Storage
     async function selectEmployee(emp) {
         currentEmployee = emp;
-        scores = { S1: 0, S2: 0, S3: 0, S4: 0, S5: 0 };
+        scores = { S1: 0, S2: 0, S3: 0, S4: 0, S5: 0 }; // เริ่มต้นที่ 0 เพื่อให้ผู้ประเมินต้องกดเลือกคะแนนเอง
         document.getElementById('totalScore').innerText = '0';
         document.getElementById('feedback').value = '';
         
@@ -174,17 +168,20 @@
 
         let html = '';
         const steps = ['S1', 'S2', 'S3', 'S4', 'S5'];
+        const stepNames = {
+            'S1': 'เปิดตัว / แนะนำตัว',
+            'S2': 'ตอบคำถามลูกค้า',
+            'S3': 'ปิดการขาย / ตอบข้อโต้แย้ง',
+            'S4': 'ซักประวัติสุขภาพ',
+            'S5': 'ลงทะเบียน'
+        };
 
         for (const s of steps) {
-            // ดึงรายชื่อไฟล์ทั้งหมดในโฟลเดอร์ของ Section นั้นๆ
             const { data: files } = await supabase.storage.from('responses').list(`${emp.user_id}/${s}`);
-            
-            // กรองเอาเฉพาะไฟล์เสียง
             const audioFiles = files?.filter(f => f.name.endsWith('.webm') || f.name.endsWith('.mp3')) || [];
 
             let audioTags = '';
             if (audioFiles.length > 0) {
-                // สร้างตัวเล่นเสียงตามจำนวนไฟล์ที่เจอ
                 audioFiles.forEach((file, index) => {
                     const { data: { publicUrl } } = supabase.storage.from('responses').getPublicUrl(`${emp.user_id}/${s}/${file.name}`);
                     audioTags += `
@@ -198,11 +195,22 @@
                 audioTags = '<p style="color:#94a3b8; margin-top: 15px;">ไม่พบไฟล์เสียงในหัวข้อนี้</p>';
             }
 
+            // เปลี่ยนจาก Input Number เป็น Dropdown Select 1-5
             html += `
                 <div class="section-box">
                     <div style="display:flex; justify-content:space-between; align-items:center; border-bottom: 1px dashed #e2e8f0; padding-bottom: 10px;">
-                        <span style="font-weight:600; font-size: 1.1em; color: var(--primary);">หัวข้อ ${s} <span style="font-size: 0.8em; color: #64748b;">(${audioFiles.length} ไฟล์)</span></span>
-                        <div>คะแนน: <input type="number" class="score-input" min="0" max="10" value="0" oninput="updateScore('${s}', this.value)"></div>
+                        <span style="font-weight:600; font-size: 1.1em; color: var(--primary);">หัวข้อ ${s} : ${stepNames[s]} <span style="font-size: 0.8em; color: #64748b;">(${audioFiles.length} ไฟล์)</span></span>
+                        <div>
+                            <span style="margin-right: 10px; font-weight: bold; color: #333;">ให้คะแนน:</span>
+                            <select class="score-input" onchange="updateScore('${s}', this.value)">
+                                <option value="0">-- เลือกคะแนน --</option>
+                                <option value="1">1 - ต้องปรับปรุง</option>
+                                <option value="2">2 - พอใช้</option>
+                                <option value="3">3 - ปานกลาง</option>
+                                <option value="4">4 - ดี</option>
+                                <option value="5">5 - ดีเยี่ยม</option>
+                            </select>
+                        </div>
                     </div>
                     ${audioTags}
                 </div>
@@ -211,31 +219,33 @@
         sectionsContainer.innerHTML = html;
     }
 
-    // 5. อัปเดตคะแนน
     window.updateScore = (s, val) => {
         scores[s] = parseInt(val) || 0;
         const total = Object.values(scores).reduce((a, b) => a + b, 0);
         document.getElementById('totalScore').innerText = total;
     }
 
-    // 6. ออกรายงาน Excel
+    // ปรับปรุงฟังก์ชันการ Export Excel ให้มีคอลัมน์ชัดเจนขึ้น
     window.exportToExcel = () => {
         const data = [{
             "ชื่อพนักงาน": currentEmployee.name,
-            "User ID": currentEmployee.user_id,
+            "รหัสอ้างอิง (User ID)": currentEmployee.user_id,
             "วันที่ส่งงาน": new Date(currentEmployee.created_at).toLocaleString('th-TH'),
-            "S1": scores.S1, "S2": scores.S2, "S3": scores.S3, "S4": scores.S4, "S5": scores.S5,
-            "คะแนนรวม": document.getElementById('totalScore').innerText,
-            "ข้อเสนอแนะ": document.getElementById('feedback').value,
+            "S1 (แนะนำตัว)": scores.S1, 
+            "S2 (ตอบคำถาม)": scores.S2, 
+            "S3 (ปิดการขาย)": scores.S3, 
+            "S4 (ซักประวัติ)": scores.S4, 
+            "S5 (ลงทะเบียน)": scores.S5,
+            "คะแนนรวม (เต็ม 25)": document.getElementById('totalScore').innerText,
+            "ข้อเสนอแนะเพิ่มเติม": document.getElementById('feedback').value,
             "วันที่ประเมิน": new Date().toLocaleString('th-TH')
         }];
         const ws = XLSX.utils.json_to_sheet(data);
         const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "ผลการประเมิน");
-        XLSX.writeFile(wb, `ประเมิน_${currentEmployee.name}.xlsx`);
+        XLSX.utils.book_append_sheet(wb, ws, "สรุปผลการประเมิน");
+        XLSX.writeFile(wb, `สรุปประเมิน_${currentEmployee.name}.xlsx`);
     }
 
-    // เริ่มทำงานเมื่อหน้าเว็บโหลดเสร็จ
     window.onload = loadEmployeeList;
 </script>
 </body>
