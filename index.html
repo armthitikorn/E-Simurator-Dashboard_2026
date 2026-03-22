@@ -84,9 +84,10 @@
    // 1. ดึงรายชื่อจาก Database เป็นหลัก (แก้ไขชื่อตารางให้มี s)
     // 1. ดึงรายชื่อจาก Database (แก้ไขให้เรียก renderList ถูกต้อง)
    // 1. ดึงรายชื่อจาก Database
+    // 1. ดึงรายชื่อจาก Database และยุบรวมชื่อที่ซ้ำกัน
     async function loadEmployeeList() {
         const { data, error } = await supabase
-            .from('submissions_with_email')
+            .from('submissions_with_email') // หรือ 'submissions' ตามที่คุณอาร์มใช้จริง
             .select('user_id, name, created_at')
             .order('created_at', { ascending: false });
 
@@ -97,48 +98,21 @@
         }
 
         if (data) {
-            console.log("✅ ดึงข้อมูลสำเร็จ:", data.length, "รายการ");
-            allSubmissions = data;
+            // --- โค้ดส่วนที่เพิ่มมาเพื่อจัดกลุ่ม (Group) รายชื่อที่ซ้ำกัน ---
+            const uniqueUsersMap = new Map();
+            data.forEach(item => {
+                // ถ้า user_id นี้ยังไม่เคยถูกเพิ่มเข้าไป ให้เพิ่มเข้าไป (จะเก็บเวลาล่าสุดไว้เพราะเรา Order by created_at DESC มาแล้ว)
+                if (!uniqueUsersMap.has(item.user_id)) {
+                    uniqueUsersMap.set(item.user_id, item);
+                }
+            });
+            
+            // แปลงข้อมูลที่จัดกลุ่มแล้วกลับมาเป็น Array เพื่อนำไปแสดงผล
+            allSubmissions = Array.from(uniqueUsersMap.values());
+            
+            console.log("✅ ดึงข้อมูลสำเร็จ (จัดกลุ่มแล้วเหลือ):", allSubmissions.length, "คน");
             renderList(allSubmissions); // ส่งข้อมูลไปแสดงผล
         }
-    }
-
-    // 2. ฟังก์ชันแสดงผลรายชื่อ (แก้ไขชื่อตัวแปรเพื่อแก้บัค TypeError)
-    function renderList(items) {
-        const listEl = document.getElementById('userList');
-        listEl.innerHTML = '';
-        
-        if (!items || items.length === 0) {
-            listEl.innerHTML = '<div style="padding:20px; text-align:center; color:#94a3b8;">ไม่พบรายชื่อพนักงาน</div>';
-            return;
-        }
-
-        items.forEach(emp => {
-            const date = new Date(emp.created_at).toLocaleDateString('th-TH');
-            const item = document.createElement('div');
-            item.className = 'user-item';
-            // ตรวจสอบชื่อ ถ้าไม่มีให้โชว์ ID แทน
-            const displayName = emp.name || `ID: ${emp.user_id.substring(0,8)}`;
-            
-            item.innerHTML = `
-                <div style="display:flex; align-items:center; gap:10px;">
-                    <div style="background:#2563eb; color:white; width:30px; height:30px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:0.8rem; flex-shrink:0;">
-                        ${displayName.charAt(0)}
-                    </div>
-                    <div style="overflow:hidden;">
-                        <strong style="display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${displayName}</strong>
-                        <small style="color:#64748b; font-size:0.75rem;">📅 ${date}</small>
-                    </div>
-                </div>
-            `;
-            item.onclick = () => {
-                // เปลี่ยนสีแถวที่เลือก
-                document.querySelectorAll('.user-item').forEach(el => el.classList.remove('active'));
-                item.classList.add('active');
-                selectEmployee(emp);
-            };
-            listEl.appendChild(item);
-        });
     }
 
     window.filterList = () => {
